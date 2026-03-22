@@ -1,3 +1,5 @@
+import Move from "./Move.js"
+
 /**
  * Represent a move to rotate the cube
  */
@@ -7,6 +9,7 @@ export default class PuzzleRotationMove extends Move {
    * @param {number} angle - Angle of rotation.
    */
   constructor(axis, angle) {
+    super();
     this.axis = axis;
     this.angle = angle;
   }

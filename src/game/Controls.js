@@ -3,9 +3,9 @@ import Easing from "../animation/Easing.js";
 import Tween from "../animation/Tween.js";
 
 import LayerRotationMove from "./move/LayerRotationMove.js";
-import PuzzleRotationMove from "./move/CubeRotationMove.js";
+import Layer from "./move/Layer.js";
+import PuzzleRotationMove from "./move/PuzzleRotationMove.js";
 import GAME_STATE from "./GameState.js";
-import LayerRotationMove from "./move/LayerRotationMove.js";
 
 const AnimationState = {
     STILL: 0,
@@ -74,9 +74,13 @@ export default class Controls {
 
   //AP
   queueAction(action) {
+    if (!this.index) {
+      this.index = 0;
+    }
+    const index = this.index++;
     this.moveInProgress = this.moveInProgress
       .catch(() => {})
-      .then(() => new Promise(action));
+      .then(() => new Promise(action))
 
     return this.moveInProgress;
   }
@@ -100,7 +104,6 @@ export default class Controls {
         });
       }
       if(moveToApply instanceof LayerRotationMove){
-        this.flipAxis = moveToApply.axis;
         this.selectLayer(moveToApply.layer);
         this.rotateLayer(moveToApply.angle, false, false, () => {
           // Do NOT add the move to the move stack - we're undoing it!
@@ -124,20 +127,20 @@ export default class Controls {
       // Use the inverse quaternion to transform the move position to global coordinates
       const inverseQuaternion = this.game.cube.object.quaternion.clone().inverse();
       const globalPosition = move.position.clone().applyQuaternion(inverseQuaternion);
+      const mainAxis = this.getMainAxis(globalPosition);
 
-      const layer = this.getLayer(globalPosition);
+      const axis = new THREE.Vector3();
+      axis[mainAxis] = 1;
 
-      // Set the axis to rotate
-      this.flipAxis = new THREE.Vector3();
+      const realMove = new LayerRotationMove(
+        new Layer(globalPosition[mainAxis], axis), move.angle
+      );
 
-      this.flipAxis[move.axis] = 1;
-      const axis = this.flipAxis.applyQuaternion(inverseQuaternion);
-      this.flipAxis = axis.clone();
       // Select the layer
-      this.selectLayer(layer.slice());
+      this.selectLayer(realMove.layer);
       // Rotate the layer
-      this.rotateLayer(move.angle, false, isKeyboardEvent, () => {
-        this.game.moveStack.push(new LayerRotationMove(layer, axis, move.angle));
+      this.rotateLayer(realMove.angle, false, isKeyboardEvent, () => {
+        this.game.moveStack.push(realMove);
         this.game.storage.saveGame();
         this.state = AnimationState.STILL;
         this.checkIsSolved();
@@ -391,9 +394,16 @@ export default class Controls {
           const worldDirection = this.helper.localToWorld( direction ).sub( this.helper.position );
           const objectDirection = this.edges.worldToLocal( worldDirection ).round();
 
-          this.flipAxis = objectDirection.cross( this.dragNormal ).negate();
+          const axis = objectDirection.cross( this.dragNormal ).negate();
+          const piece = this.dragIntersect.object.parent;
+          const mainAxis = this.getMainAxis(axis);
+          const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
+          const piecePosition = piece.position.clone() .multiplyScalar( scalar ) .round()
+          const layer = new Layer(piecePosition[mainAxis], axis);
+          console.log(layer);
+          this.draggedLayer = layer
 
-          this.selectLayer( this.getLayer( false ) );
+          this.selectLayer( layer );
 
         } else {
 
@@ -462,8 +472,7 @@ export default class Controls {
           // 360 degrees rotation would AnimationState.STILL be possible, even if they don't do anything.
           // This is probably preferable in terms of UX.
           if (Math.abs(angle) > 1.5) {
-            // TODO: Refactor with new layer selection in mind
-            //this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), angle));
+            this.game.moveStack.push(this.draggedLayer, angle);
           }
           this.game.storage.saveGame();
           
@@ -588,12 +597,14 @@ export default class Controls {
   }
 
   selectLayer( layer ) {
-    this.resetLayer();
+    console.log(layer);
+    this.resetPieces();
     this.group.rotation.set( 0, 0, 0 );
-    this.applyLayer( layer );
+    this.selectPiecesOnLayer(layer);
+    this.flipAxis = layer.axis;
   }
 
-  resetLayer() {
+  resetPieces() {
     this.group.updateMatrixWorld();
     this.game.cube.object.updateMatrixWorld();
     while (this.group.children.length > 0) {
@@ -601,22 +612,15 @@ export default class Controls {
       this.movePiece(piece, this.group, this.game.cube.object)
     }
   }
-  applyLayer( layer ) {
+  selectPiecesOnLayer( layer ) {
+    const pieces = this.getPiecesFromLayer(layer)
+    this.group.updateMatrixWorld();
+    this.game.cube.object.updateMatrixWorld();
 
-  this.group.updateMatrixWorld();
-  this.game.cube.object.updateMatrixWorld();
 
-  layer.forEach( index => {
-
-    const piece = this.game.cube.pieces[ index ];
-
-    piece.applyMatrix( this.game.cube.object.matrixWorld );
-    this.game.cube.object.remove( piece );
-    piece.applyMatrix( new THREE.Matrix4().getInverse( this.group.matrixWorld ) );
-    this.group.add( piece );
-
-  } );
-
+    pieces.forEach( piece => {
+      this.movePiece(piece, this.game.cube.object, this.group)
+    } );
   }
 
   movePiece(piece, from, to) {
@@ -626,8 +630,25 @@ export default class Controls {
     to.add( piece );
   }
 
+  /**
+   * Get the pieces on the given layer
+   * 
+   * @param {Layer} layer  Layer to select from
+   * @returns
+   */
+  getPiecesFromLayer(layer) {
+    const axis = this.getMainAxis(layer.axis);
+    const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
+    const pieces = this.game.cube.pieces.filter(piece => {
+      const piecePosition = piece.position.clone().multiplyScalar( scalar ).round();
+      return piecePosition[ axis ] == layer.index
+    });
+    console.log(pieces);
+    return pieces;
+  }
+
   getLayer( position ) {
-    this.resetLayer();
+    this.resetPieces();
     const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
     const layer = [];
 
@@ -666,16 +687,18 @@ export default class Controls {
       this.scramble.callback = ( typeof callback !== 'function' ) ? () => {} : callback;
 
     }
-
     const converted = this.scramble.converted;
     const move = converted[ 0 ];
-    const layer = this.getLayer( move.position );
 
-    this.flipAxis = new THREE.Vector3();
-    this.flipAxis[ move.axis ] = 1;
+    const axis = new THREE.Vector3();
+    axis[ move.axis] = 1;
 
-    this.selectLayer( layer );
-    this.rotateLayer( move.angle, true, false, () => {
+    const realMove = new LayerRotationMove(
+      new Layer(move.position[move.axis], axis), move.angle
+    );
+
+    this.selectLayer( realMove.layer );
+    this.rotateLayer( realMove.angle, true, false, () => {
 
       converted.shift();
 

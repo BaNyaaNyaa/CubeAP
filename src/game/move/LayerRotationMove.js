@@ -1,15 +1,16 @@
+import Move from "./Move.js"
+
 /**
  * Represent a move on the cube
  */
 export default class LayerRotationMove extends Move {
   /**
-   * @param {number[]} layer - Index of all the cubes in the layer in rotation
-   * @param {THREE.Vector3} axis - Axis of rotation
+   * @param {Layer} layer - Layer where the move is applied
    * @param {number} angle - Angle of rotation.
    */
-  constructor(layer, axis, angle) {
+  constructor(layer, angle) {
+    super();
     this.layer = layer;
-    this.axis = axis;
     this.angle = angle;
   }
 
@@ -18,6 +19,6 @@ export default class LayerRotationMove extends Move {
    * @returns Move
    */
   inverse() {
-    return new Move(this.layer.slice(), this.axis.clone(), -this.angle);
+    return new Move(this.layer, -this.angle);
   }
 }
