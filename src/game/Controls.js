@@ -127,25 +127,17 @@ export default class Controls {
 
       const layer = this.getLayer(globalPosition);
 
-      if( this.flipLayer != null) {
-        this.state = AnimationState.STILL;
-        console.log("Already flipping, cannot rotate the cube", this.flipLayer);
-        resolve();
-        return;
-      }else{
-        console.log("OK")
-      }
-
       // Set the axis to rotate
       this.flipAxis = new THREE.Vector3();
 
       this.flipAxis[move.axis] = 1;
-      this.flipAxis = this.flipAxis.applyQuaternion(inverseQuaternion);
+      const axis = this.flipAxis.applyQuaternion(inverseQuaternion);
+      this.flipAxis = axis.clone();
       // Select the layer
-      this.selectLayer(layer);
+      this.selectLayer(layer.slice());
       // Rotate the layer
-      this.rotateLayer(move.angle, false, isKeyboardEvent, rotatedLayer => {
-        this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), move.angle));
+      this.rotateLayer(move.angle, false, isKeyboardEvent, () => {
+        this.game.moveStack.push(new LayerRotationMove(layer, axis, move.angle));
         this.game.storage.saveGame();
         this.state = AnimationState.STILL;
         this.checkIsSolved();
@@ -162,13 +154,6 @@ export default class Controls {
       this.state = AnimationState.ANIMATING;
       let axis = face;
       let angle = -Math.PI / 2 * ( ( modifier == "'" ) ? - 1 : 1 );
-
-      if( this.flipLayer != null) {
-        this.state = AnimationState.STILL;
-        console.log("Already flipping, cannot rotate the cube", this.flipLayer, "tried to rotate around", axis);
-        resolve();
-        return;
-      }
 
       this.flipAxis = new THREE.Vector3();
       this.flipAxis[axis] = 1;
@@ -472,12 +457,13 @@ export default class Controls {
 
       if ( this.flipType === 'layer' ) {
 
-        this.rotateLayer( delta, false, false, rotatedLayer => {
+        this.rotateLayer( delta, false, false, () => {
           // If the angle is too small, it means no rotation was applied. We ignore it.
           // 360 degrees rotation would AnimationState.STILL be possible, even if they don't do anything.
           // This is probably preferable in terms of UX.
           if (Math.abs(angle) > 1.5) {
-            this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), angle));
+            // TODO: Refactor with new layer selection in mind
+            //this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), angle));
           }
           this.game.storage.saveGame();
           
@@ -515,11 +501,10 @@ export default class Controls {
    * @param {boolean} scramble - True if the cube is being scrambled.
    * @param {boolean} isKeyboardEvent - True if the rotation was triggered by a keyboard input
    * @param {onRotateCompleteCallback} callback - Callback to call once the animation is complete.
+   * 
+   * @callback onRotateCompleteCallback
    */
   rotateLayer(rotation, scramble, isKeyboardEvent, callback) {
-
-    const layerSnapshot = this.flipLayer ? this.flipLayer.slice() : null;
-
     const config = scramble ? 0 : this.flipConfig;
     const easing = this.flipEasings[config];
     const duration = isKeyboardEvent ? this.flipSpeeds[config] / 3 : this.flipSpeeds[config];
@@ -540,21 +525,15 @@ export default class Controls {
 
         if (!scramble) this.onMove();
 
-        if (layerSnapshot) {
+        this.game.cube.object.rotation.setFromVector3(
+          this.snapRotation(this.game.cube.object.rotation.toVector3())
+        );
 
-          this.game.cube.object.rotation.setFromVector3(
-            this.snapRotation(this.game.cube.object.rotation.toVector3())
-          );
+        this.group.rotation.setFromVector3(
+          this.snapRotation(this.group.rotation.toVector3())
+        );
 
-          this.group.rotation.setFromVector3(
-            this.snapRotation(this.group.rotation.toVector3())
-          );
-
-          this.deselectLayer(layerSnapshot);
-        }
-
-        callback(layerSnapshot);
-
+        callback();
       }
     });
   }
@@ -609,40 +588,46 @@ export default class Controls {
   }
 
   selectLayer( layer ) {
-
+    this.resetLayer();
     this.group.rotation.set( 0, 0, 0 );
-    this.movePieces( layer, this.game.cube.object, this.group );
-    this.flipLayer = layer;
+    this.applyLayer( layer );
+  }
+
+  resetLayer() {
+    this.group.updateMatrixWorld();
+    this.game.cube.object.updateMatrixWorld();
+    while (this.group.children.length > 0) {
+      const piece = this.group.children[0];
+      this.movePiece(piece, this.group, this.game.cube.object)
+    }
+  }
+  applyLayer( layer ) {
+
+  this.group.updateMatrixWorld();
+  this.game.cube.object.updateMatrixWorld();
+
+  layer.forEach( index => {
+
+    const piece = this.game.cube.pieces[ index ];
+
+    piece.applyMatrix( this.game.cube.object.matrixWorld );
+    this.game.cube.object.remove( piece );
+    piece.applyMatrix( new THREE.Matrix4().getInverse( this.group.matrixWorld ) );
+    this.group.add( piece );
+
+  } );
 
   }
 
-  deselectLayer( layer ) {
-
-    this.movePieces( layer, this.group, this.game.cube.object );
-    this.flipLayer = null;
-
-  }
-
-  movePieces( layer, from, to ) {
-
-    from.updateMatrixWorld();
-    to.updateMatrixWorld();
-
-    layer.forEach( index => {
-
-      const piece = this.game.cube.pieces[ index ];
-
-      piece.applyMatrix( from.matrixWorld );
-      from.remove( piece );
-      piece.applyMatrix( new THREE.Matrix4().getInverse( to.matrixWorld ) );
-      to.add( piece );
-
-    } );
-
+  movePiece(piece, from, to) {
+    piece.applyMatrix( from.matrixWorld );
+    from.remove( piece );
+    piece.applyMatrix( new THREE.Matrix4().getInverse( to.matrixWorld ) );
+    to.add( piece );
   }
 
   getLayer( position ) {
-
+    this.resetLayer();
     const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
     const layer = [];
 
