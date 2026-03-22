@@ -9,7 +9,7 @@ export default class LayerRotationMove extends Move {
    * @param {number} angle - Angle of rotation.
    */
   constructor(layer, angle) {
-    super();
+    super("layer_rotation");
     this.layer = layer;
     this.angle = angle;
   }

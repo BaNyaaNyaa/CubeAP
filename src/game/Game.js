@@ -1,7 +1,7 @@
 import Controls from "./Controls.js";
 import Cube from "./Cube.js";
 import MoveStack from "./MoveStack.js";
-import Scrambler from "./Scrambler.js";
+import MoveHandler from "./MoveHandler.js";
 import Storage from "./Storage.js";
 import Transition from "./Transition.js";
 
@@ -71,7 +71,7 @@ export default class Game {
     this.cube = new Cube( this );
     this.controls = new Controls( this );
     this.moveStack = new MoveStack();
-    this.scrambler = new Scrambler( this );
+    this.moveHandler = new MoveHandler( gameOptions.size );
     this.transition = new Transition( this );
     this.timer = new Timer( this );
     this.preferences = new Preferences( this );
@@ -186,7 +186,7 @@ export default class Game {
         this.prefs( DISPLAY.Hide );
 
       } else{
-        this.controls.undo_action();
+        this.controls.undoAction();
       }
        
        //else if ( this.state === GAME_STATE.Theme ) {
@@ -223,16 +223,21 @@ export default class Game {
   game( show ) {
 
     if ( show ) {
-
+      const scrambleLengths = {
+        2: 11,
+        3: 20,
+        4: 30,
+        5: 40
+      };
+      let scrambleLength = 0;
       if ( ! this.saved ) {
-
-        this.scrambler.scramble();
-        this.controls.scrambleCube();
+        scrambleLength = scrambleLengths[this.moveHandler.cubeSize];
+        const moves = this.moveHandler.generateRandomMoves(scrambleLength);
+        this.controls.applyScramble(moves);
         this.newGame = true;
 
       }
-      const duration = this.saved ? 0 :
-        this.scrambler.converted.length * ( this.controls.flipSpeeds[0] + 10 );
+      const duration = scrambleLength * ( this.controls.flipSpeeds[0] + 10 );
 
       this.state = GAME_STATE.Playing;
       this.saved = true;

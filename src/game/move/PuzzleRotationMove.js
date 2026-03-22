@@ -9,7 +9,7 @@ export default class PuzzleRotationMove extends Move {
    * @param {number} angle - Angle of rotation.
    */
   constructor(axis, angle) {
-    super();
+    super("puzzle_rotation");
     this.axis = axis;
     this.angle = angle;
   }

@@ -22,7 +22,7 @@ export default class Preferences {
 
       //     this.game.preferences.ranges.scramble.list.forEach( ( item, i ) => {
 
-      //       item.innerHTML = this.game.scrambler.scrambleLength[ this.game.cube.size ][ i ];
+      //       item.innerHTML = this.game.moveHandler.scrambleLength[ this.game.cube.size ][ i ];
 
       //     } );
 
@@ -40,18 +40,6 @@ export default class Preferences {
 
         },
         onComplete: () => this.game.storage.savePreferences(),
-      } ),
-
-      scramble: new Range( 'scramble', {
-        value: this.game.scrambler.dificulty,
-        range: [ 0, 2 ],
-        step: 1,
-        onUpdate: value => {
-
-          this.game.scrambler.dificulty = value;
-
-        },
-        onComplete: () => this.game.storage.savePreferences()
       } ),
 
       fov: new Range( 'fov', {
@@ -112,12 +100,6 @@ export default class Preferences {
         onComplete: () => this.game.storage.savePreferences(),
       } ),
     };
-
-    this.ranges.scramble.list.forEach( ( item, i ) => {
-
-      item.innerHTML = this.game.scrambler.scrambleLength[ this.game.cube.size ][ i ];
-
-    } );
     
   }
 

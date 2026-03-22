@@ -4,7 +4,7 @@ import Tween from "../animation/Tween.js";
 
 import LayerRotationMove from "./move/LayerRotationMove.js";
 import Layer from "./move/Layer.js";
-import PuzzleRotationMove from "./move/PuzzleRotationMove.js";
+import Move from "./move/Move.js";
 import GAME_STATE from "./GameState.js";
 
 const AnimationState = {
@@ -85,88 +85,86 @@ export default class Controls {
     return this.moveInProgress;
   }
 
-  undo_action(){
+  undoAction(){
     if (!this.enabled || this.scramble !== null || this.deathlinksInProgress > 0 || this.state == AnimationState.ANIMATING) return;
-    this.queueAction((resolve) => {
-      const lastMove = this.game.moveStack.pop();
-      if (!lastMove) {
-        resolve();
-        return;
-      }
-      const moveToApply = lastMove.inverse();
-      this.state = AnimationState.ANIMATING;
-      if(moveToApply instanceof PuzzleRotationMove) {
-        this.flipAxis = moveToApply.axis;
-        this.rotateCube(moveToApply.angle, () => {
-          this.state = AnimationState.STILL;
-          this.game.storage.saveGame();
-          resolve();
-        });
-      }
-      if(moveToApply instanceof LayerRotationMove){
-        this.selectLayer(moveToApply.layer);
-        this.rotateLayer(moveToApply.angle, false, false, () => {
-          // Do NOT add the move to the move stack - we're undoing it!
-          this.game.storage.saveGame();
-          this.state = AnimationState.STILL;
-          this.checkIsSolved();
-          resolve();
-        });
-      }
-    });
+    const lastMove = this.game.moveStack.pop();
+    if (!lastMove) {
+      return;
+    }
+    console.log(lastMove);
+    this.applyMove(lastMove.inverse(), false, false);
   }
 
-  moveSide(moveDescriptor, isKeyboardEvent){
-    this.queueAction((resolve) => {
-      this.state = AnimationState.ANIMATING;
-      const move = this.game.scrambler.convertMove(moveDescriptor);
-
-      // Get the layer to rotate
-      // Always get the layer corresponding to the global axis, not the local cube orientation
-      // Find the world position of the layer by transforming the intended position by the cube's rotation
-      // Use the inverse quaternion to transform the move position to global coordinates
-      const inverseQuaternion = this.game.cube.object.quaternion.clone().inverse();
-      const globalPosition = move.position.clone().applyQuaternion(inverseQuaternion);
-      const mainAxis = this.getMainAxis(globalPosition);
-
-      const axis = new THREE.Vector3();
-      axis[mainAxis] = 1;
-
-      const realMove = new LayerRotationMove(
-        new Layer(globalPosition[mainAxis], axis), move.angle
-      );
-
-      // Select the layer
-      this.selectLayer(realMove.layer);
-      // Rotate the layer
-      this.rotateLayer(realMove.angle, false, isKeyboardEvent, () => {
-        this.game.moveStack.push(realMove);
-        this.game.storage.saveGame();
-        this.state = AnimationState.STILL;
-        this.checkIsSolved();
-        resolve();
-      });
-    });
+  /**
+   * Add the given move to the queue
+   * 
+   * @param {Move} move The move to apply
+   * @param {boolean} isKeyboardEvent Whether the move was triggered by a keyboard press
+   * @param {boolean} addMoveToStack Whether the move should be added to the move history.
+   */
+  applyMove(move, isKeyboardEvent, addMoveToStack) {
+    switch (move.type) {
+      case "layer_rotation":
+        this.queueAction((resolve) => {
+          this.state = AnimationState.ANIMATING;
+          // Select the layer
+          this.selectLayer(move.layer);
+          // Rotate the layer
+          this.rotateLayer(move.angle, false, isKeyboardEvent, () => {
+            if (addMoveToStack) {
+              this.game.moveStack.push(move);
+            }
+            this.game.storage.saveGame();
+            this.state = AnimationState.STILL;
+            this.checkIsSolved();
+            resolve();
+          });
+        });
+        break;
+      case "puzzle_rotation":
+        this.queueAction((resolve) => {
+          this.flipAxis = move.axis;
+          this.rotateCube(move.angle, () => {
+            if (addMoveToStack) {
+              this.game.moveStack.push(move);
+            }
+            this.state = AnimationState.STILL;
+            this.game.storage.saveGame();
+            resolve();
+          });
+        })
+        break;
+      default:
+        console.log("Unhandled move type: ", move.type);
+        break;
+    }
   }
 
-  moveRotation(moveDescriptor){
-    this.queueAction((resolve) => {
-      const face = moveDescriptor.charAt( 0 );
-      const modifier = moveDescriptor.charAt( 1 );
-      
-      this.state = AnimationState.ANIMATING;
-      let axis = face;
-      let angle = -Math.PI / 2 * ( ( modifier == "'" ) ? - 1 : 1 );
+  /**
+   * Apply the list of layer rotation moves
+   * 
+   * @param {LayerRotationMove} moves 
+   */
+  async applyScramble(moves) {
+    while (moves.length > 0) {
+      const move = moves.pop(0);
+      const promise = new Promise((resolve) => {
+        this.selectLayer( move.layer );
+        this.rotateLayer( move.angle, true, false, () => {
+          resolve();
+        } );
+      })
+      await promise;
+    }
+    this.scramble = null;
+    this.game.cube.updateColors(this.game.themes.getColors(), this.game.sidePermutation);
+    this.game.storage.saveGame();
+  }
 
-      this.flipAxis = new THREE.Vector3();
-      this.flipAxis[axis] = 1;
-      this.rotateCube(angle, () => {
-        this.game.moveStack.push(new PuzzleRotationMove(this.flipAxis.clone(), angle));
-        this.state = AnimationState.STILL;
-        this.game.storage.saveGame();
-        resolve();
-      });
-    });
+  applyMoveFromNotation(notation, isKeyboardEvent){
+    const inverseQuaternion = this.game.cube.object.quaternion.clone().inverse();
+    const move = this.game.moveHandler.convertNotationToMove(notation, inverseQuaternion);
+    this.applyMove(move, isKeyboardEvent, true);
   }
 
   async doDeathLink(source, cause) {
@@ -197,10 +195,8 @@ export default class Controls {
       while(!this.enabled || this.scramble !== null){
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
-
-      const faces = 'UDLRFB';
-      const move = faces[ Math.floor( Math.random() * faces.length ) ];
-      this.moveSide(move, false);
+      const move = this.game.moveHandler.generateRandomMove();
+      this.applyMove(move, false, false);
       this.deathlinkMoves--;
     };
 
@@ -234,7 +230,7 @@ export default class Controls {
 
       if (event.key === 'Backspace') {
         window.dispatchEvent(new MouseEvent("mouseup"));
-        this.undo_action();
+        this.undoAction();
       }
 
       let moveDescriptor = '';
@@ -284,11 +280,8 @@ export default class Controls {
       if (moveDescriptor !== '') {
         window.dispatchEvent(new MouseEvent("mouseup"));
         const face = moveDescriptor.charAt( 0 );
-        if (['L', 'R', 'U', 'D', 'F', 'B'].includes(face)) {
-          this.moveSide(moveDescriptor, true);
-        }
-        if(['x', 'y', 'z'].includes(face)) {
-          this.moveRotation(moveDescriptor);
+        if (['L', 'R', 'U', 'D', 'F', 'B', 'x', 'y', 'z'].includes(face)) {
+          this.applyMoveFromNotation(moveDescriptor, true);
         }
       }
 
@@ -400,7 +393,6 @@ export default class Controls {
           const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
           const piecePosition = piece.position.clone() .multiplyScalar( scalar ) .round()
           const layer = new Layer(piecePosition[mainAxis], axis);
-          console.log(layer);
           this.draggedLayer = layer
 
           this.selectLayer( layer );
@@ -597,7 +589,6 @@ export default class Controls {
   }
 
   selectLayer( layer ) {
-    console.log(layer);
     this.resetPieces();
     this.group.rotation.set( 0, 0, 0 );
     this.selectPiecesOnLayer(layer);
@@ -643,7 +634,6 @@ export default class Controls {
       const piecePosition = piece.position.clone().multiplyScalar( scalar ).round();
       return piecePosition[ axis ] == layer.index
     });
-    console.log(pieces);
     return pieces;
   }
 
@@ -676,44 +666,6 @@ export default class Controls {
     } );
 
     return layer;
-
-  }
-
-  scrambleCube() {
-
-    if ( this.scramble == null ) {
-
-      this.scramble = this.game.scrambler;
-      this.scramble.callback = ( typeof callback !== 'function' ) ? () => {} : callback;
-
-    }
-    const converted = this.scramble.converted;
-    const move = converted[ 0 ];
-
-    const axis = new THREE.Vector3();
-    axis[ move.axis] = 1;
-
-    const realMove = new LayerRotationMove(
-      new Layer(move.position[move.axis], axis), move.angle
-    );
-
-    this.selectLayer( realMove.layer );
-    this.rotateLayer( realMove.angle, true, false, () => {
-
-      converted.shift();
-
-      if ( converted.length > 0 ) {
-
-        this.scrambleCube();
-
-      } else {
-
-        this.scramble = null;
-        this.game.cube.updateColors(this.game.themes.getColors(), this.game.sidePermutation);
-        this.game.storage.saveGame();
-      }
-
-    } );
 
   }
 
