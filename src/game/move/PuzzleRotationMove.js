@@ -1,7 +1,7 @@
 /**
  * Represent a move to rotate the cube
  */
-export default class RotateMove {
+export default class PuzzleRotationMove extends Move {
   /**
    * @param {THREE.Vector3} axis - Axis of rotation
    * @param {number} angle - Angle of rotation.
@@ -16,6 +16,6 @@ export default class RotateMove {
    * @returns Move
    */
   inverse() {
-    return new RotateMove(this.axis.clone(), -this.angle);
+    return new PuzzleRotationMove(this.axis.clone(), -this.angle);
   }
 }

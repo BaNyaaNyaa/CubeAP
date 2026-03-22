@@ -2,9 +2,10 @@ import Draggable from "../animation/Draggable.js";
 import Easing from "../animation/Easing.js";
 import Tween from "../animation/Tween.js";
 
-import Move from "./Move.js";
-import RotateMove from "./RotateMove.js";
+import LayerRotationMove from "./move/LayerRotationMove.js";
+import PuzzleRotationMove from "./move/CubeRotationMove.js";
 import GAME_STATE from "./GameState.js";
+import LayerRotationMove from "./move/LayerRotationMove.js";
 
 const AnimationState = {
     STILL: 0,
@@ -90,15 +91,15 @@ export default class Controls {
       }
       const moveToApply = lastMove.inverse();
       this.state = AnimationState.ANIMATING;
-      if(moveToApply instanceof RotateMove){
-        this.flipLayer = moveToApply.
+      if(moveToApply instanceof PuzzleRotationMove) {
+        this.flipAxis = moveToApply.axis;
         this.rotateCube(moveToApply.angle, () => {
           this.state = AnimationState.STILL;
           this.game.storage.saveGame();
           resolve();
         });
       }
-      if(moveToApply instanceof Move){
+      if(moveToApply instanceof LayerRotationMove){
         this.flipAxis = moveToApply.axis;
         this.selectLayer(moveToApply.layer);
         this.rotateLayer(moveToApply.angle, false, false, () => {
@@ -144,7 +145,7 @@ export default class Controls {
       this.selectLayer(layer);
       // Rotate the layer
       this.rotateLayer(move.angle, false, isKeyboardEvent, rotatedLayer => {
-        this.game.moveStack.push(new Move(rotatedLayer.slice(), this.flipAxis.clone(), move.angle));
+        this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), move.angle));
         this.game.storage.saveGame();
         this.state = AnimationState.STILL;
         this.checkIsSolved();
@@ -172,7 +173,7 @@ export default class Controls {
       this.flipAxis = new THREE.Vector3();
       this.flipAxis[axis] = 1;
       this.rotateCube(angle, () => {
-        this.game.moveStack.push(new RotateMove(this.flipAxis.clone(), angle));
+        this.game.moveStack.push(new PuzzleRotationMove(this.flipAxis.clone(), angle));
         this.state = AnimationState.STILL;
         this.game.storage.saveGame();
         resolve();
@@ -476,7 +477,7 @@ export default class Controls {
           // 360 degrees rotation would AnimationState.STILL be possible, even if they don't do anything.
           // This is probably preferable in terms of UX.
           if (Math.abs(angle) > 1.5) {
-            this.game.moveStack.push(new Move(rotatedLayer.slice(), this.flipAxis.clone(), angle));
+            this.game.moveStack.push(new LayerRotationMove(rotatedLayer.slice(), this.flipAxis.clone(), angle));
           }
           this.game.storage.saveGame();
           

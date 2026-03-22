@@ -1,7 +1,7 @@
 /**
  * Represent a move on the cube
  */
-export default class Move {
+export default class LayerRotationMove extends Move {
   /**
    * @param {number[]} layer - Index of all the cubes in the layer in rotation
    * @param {THREE.Vector3} axis - Axis of rotation
