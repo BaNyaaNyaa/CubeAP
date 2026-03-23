@@ -22,6 +22,7 @@ export default class Controls {
   constructor( game ) {
 
     this.game = game;
+    this.scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
 
     this.flipConfig = 0;
     this.controlStyle = 0;
@@ -64,20 +65,16 @@ export default class Controls {
     this.deathlinksInProgress = 0;
     this.dragResolve = () => {};
 
-    this.initDraggable();
+    this.#initDraggable();
 
-    this.addAdditionalKeyListener();
-    this.addDeathLinkListener();
+    this.#addAdditionalKeyListener();
+    this.#addDeathLinkListener();
 
     this.moveInProgress = Promise.resolve()
   }
 
   //AP
-  queueAction(action) {
-    if (!this.index) {
-      this.index = 0;
-    }
-    const index = this.index++;
+  #queueAction(action) {
     this.moveInProgress = this.moveInProgress
       .catch(() => {})
       .then(() => new Promise(action))
@@ -91,8 +88,7 @@ export default class Controls {
     if (!lastMove) {
       return;
     }
-    console.log(lastMove);
-    this.applyMove(lastMove.inverse(), false, false);
+    this.#applyMove(lastMove.inverse(), false, false);
   }
 
   /**
@@ -102,15 +98,16 @@ export default class Controls {
    * @param {boolean} isKeyboardEvent Whether the move was triggered by a keyboard press
    * @param {boolean} addMoveToStack Whether the move should be added to the move history.
    */
-  applyMove(move, isKeyboardEvent, addMoveToStack) {
+  #applyMove(move, isKeyboardEvent, addMoveToStack) {
+
     switch (move.type) {
       case "layer_rotation":
-        this.queueAction((resolve) => {
+        this.#queueAction((resolve) => {
           this.state = AnimationState.ANIMATING;
           // Select the layer
-          this.selectLayer(move.layer);
+          this.#selectLayer(move.layer);
           // Rotate the layer
-          this.rotateLayer(move.angle, false, isKeyboardEvent, () => {
+          this.#rotateLayer(move.angle, false, isKeyboardEvent, () => {
             if (addMoveToStack) {
               this.game.moveStack.push(move);
             }
@@ -122,9 +119,9 @@ export default class Controls {
         });
         break;
       case "puzzle_rotation":
-        this.queueAction((resolve) => {
+        this.#queueAction((resolve) => {
           this.flipAxis = move.axis;
-          this.rotateCube(move.angle, () => {
+          this.#rotateCube(move.angle, () => {
             if (addMoveToStack) {
               this.game.moveStack.push(move);
             }
@@ -149,8 +146,8 @@ export default class Controls {
     while (moves.length > 0) {
       const move = moves.pop(0);
       const promise = new Promise((resolve) => {
-        this.selectLayer( move.layer );
-        this.rotateLayer( move.angle, true, false, () => {
+        this.#selectLayer( move.layer );
+        this.#rotateLayer( move.angle, true, false, () => {
           resolve();
         } );
       })
@@ -161,10 +158,10 @@ export default class Controls {
     this.game.storage.saveGame();
   }
 
-  applyMoveFromNotation(notation, isKeyboardEvent){
+  #applyMoveFromNotation(notation, isKeyboardEvent){
     const inverseQuaternion = this.game.cube.object.quaternion.clone().inverse();
     const move = this.game.moveHandler.convertNotationToMove(notation, inverseQuaternion);
-    this.applyMove(move, isKeyboardEvent, true);
+    this.#applyMove(move, isKeyboardEvent, true);
   }
 
   async doDeathLink(source, cause) {
@@ -196,7 +193,7 @@ export default class Controls {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       const move = this.game.moveHandler.generateRandomMove();
-      this.applyMove(move, false, false);
+      this.#applyMove(move, false, false);
       this.deathlinkMoves--;
     };
 
@@ -205,7 +202,7 @@ export default class Controls {
       while (this.deathlinkMoves > 0) {
         await applyDeathlinkMove();
       }
-      this.queueAction((resolve) => {
+      this.#queueAction((resolve) => {
         this.deathlinksInProgress--;
         this.game.moveStack.clear();
         resolve();
@@ -213,11 +210,11 @@ export default class Controls {
     }
   }
   
-  addDeathLinkListener() {
+  #addDeathLinkListener() {
     window.doDeathLink = this.doDeathLink.bind(this);
   }
 
-  addAdditionalKeyListener() {
+  #addAdditionalKeyListener() {
     document.addEventListener('keydown', event => {
       let eventKey = event.key;
 
@@ -281,7 +278,7 @@ export default class Controls {
         window.dispatchEvent(new MouseEvent("mouseup"));
         const face = moveDescriptor.charAt( 0 );
         if (['L', 'R', 'U', 'D', 'F', 'B', 'x', 'y', 'z'].includes(face)) {
-          this.applyMoveFromNotation(moveDescriptor, true);
+          this.#applyMoveFromNotation(moveDescriptor, true);
         }
       }
 
@@ -302,7 +299,7 @@ export default class Controls {
 
   }
 
-  initDraggable() {
+  #initDraggable() {
 
     this.draggable = new Draggable( this.game.dom.game );
 
@@ -326,7 +323,7 @@ export default class Controls {
         this.dragNormal = edgeIntersect.face.normal.round();
         this.flipType = 'layer';
 
-        this.attach( this.helper, this.edges );
+        this.#attach( this.helper, this.edges );
 
         this.helper.rotation.set( 0, 0, 0 );
         this.helper.position.set( 0, 0, 0 );
@@ -334,7 +331,7 @@ export default class Controls {
         this.helper.translateZ( 0.5 );
         this.helper.updateMatrixWorld();
 
-        this.detach( this.helper, this.edges );
+        this.#detach( this.helper, this.edges );
 
       } else {
 
@@ -369,11 +366,11 @@ export default class Controls {
       this.dragDelta = point.clone().sub( this.dragCurrent ).setZ( 0 );
       this.dragTotal.add( this.dragDelta );
       this.dragCurrent = point;
-      this.addMomentumPoint( this.dragDelta );
+      this.#addMomentumPoint( this.dragDelta );
 
       if ( this.state === AnimationState.PREPARING && this.dragTotal.length() > 0.05 ) {
         
-        this.queueAction((resolve) => {
+        this.#queueAction((resolve) => {
           this.dragResolve = resolve;
         });
 
@@ -390,22 +387,25 @@ export default class Controls {
           const axis = objectDirection.cross( this.dragNormal ).negate();
           const piece = this.dragIntersect.object.parent;
           const mainAxis = this.getMainAxis(axis);
-          const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
-          const piecePosition = piece.position.clone() .multiplyScalar( scalar ) .round()
+          const piecePosition = piece.position.clone().multiplyScalar( this.scalar ).round()
           const layer = new Layer(piecePosition[mainAxis], axis);
           this.draggedLayer = layer
 
-          this.selectLayer( layer );
+          this.#selectLayer( layer );
 
         } else {
+          const axis = new THREE.Vector3();
+          if (this.dragDirection === 'x') {
+            axis.setY(1);
+          } else {
+            if (position.current.x > this.game.world.width / 2) {
+              axis.setZ(1);
+            } else {
+              axis.setX(-1)
+            }
+          }
 
-          const axis = ( this.dragDirection != 'x' )
-            ? ( ( this.dragDirection == 'y' && position.current.x > this.game.world.width / 2 ) ? 'z' : 'x' )
-            : 'y';
-
-          this.flipAxis = new THREE.Vector3();
-          this.flipAxis[ axis ] = 1 * ( ( axis == 'x' ) ? - 1 : 1 );
-
+          this.flipAxis = axis.clone();
         }
 
         this.flipAngle = 0;
@@ -448,23 +448,23 @@ export default class Controls {
 
       this.state = AnimationState.ANIMATING;
 
-      const momentum = this.getMomentum()[ this.dragDirection ];
+      const momentum = this.#getMomentum()[ this.dragDirection ];
       const flip = ( Math.abs( momentum ) > 0.05 && Math.abs( this.flipAngle ) < Math.PI / 2 );
 
       const angle = flip
-        ? this.roundAngle( this.flipAngle + Math.sign( this.flipAngle ) * ( Math.PI / 4 ) )
-        : this.roundAngle( this.flipAngle );
+        ? this.#roundAngle( this.flipAngle + Math.sign( this.flipAngle ) * ( Math.PI / 4 ) )
+        : this.#roundAngle( this.flipAngle );
 
       const delta = angle - this.flipAngle;
 
       if ( this.flipType === 'layer' ) {
 
-        this.rotateLayer( delta, false, false, () => {
+        this.#rotateLayer( delta, false, false, () => {
           // If the angle is too small, it means no rotation was applied. We ignore it.
           // 360 degrees rotation would AnimationState.STILL be possible, even if they don't do anything.
           // This is probably preferable in terms of UX.
           if (Math.abs(angle) > 1.5) {
-            this.game.moveStack.push(this.draggedLayer, angle);
+            this.game.moveStack.push(new LayerRotationMove(this.draggedLayer, angle));
           }
           this.game.storage.saveGame();
           
@@ -480,7 +480,7 @@ export default class Controls {
 
       } else {
 
-        this.rotateCube( delta, () => {
+        this.#rotateCube( delta, () => {
 
           this.state = this.gettingDrag ? AnimationState.PREPARING : AnimationState.STILL;
           this.gettingDrag = false;
@@ -505,11 +505,11 @@ export default class Controls {
    * 
    * @callback onRotateCompleteCallback
    */
-  rotateLayer(rotation, scramble, isKeyboardEvent, callback) {
+  #rotateLayer(rotation, scramble, isKeyboardEvent, callback) {
     const config = scramble ? 0 : this.flipConfig;
     const easing = this.flipEasings[config];
     const duration = isKeyboardEvent ? this.flipSpeeds[config] / 3 : this.flipSpeeds[config];
-    const bounce = (config == 2) ? this.bounceCube() : (() => {});
+    const bounce = (config == 2) ? this.#bounceCube() : (() => {});
 
     this.rotationTween = new Tween({
 
@@ -527,11 +527,11 @@ export default class Controls {
         if (!scramble) this.onMove();
 
         this.game.cube.object.rotation.setFromVector3(
-          this.snapRotation(this.game.cube.object.rotation.toVector3())
+          this.#snapRotation(this.game.cube.object.rotation.toVector3())
         );
 
         this.group.rotation.setFromVector3(
-          this.snapRotation(this.group.rotation.toVector3())
+          this.#snapRotation(this.group.rotation.toVector3())
         );
 
         callback();
@@ -539,7 +539,7 @@ export default class Controls {
     });
   }
 
-  bounceCube() {
+  #bounceCube() {
 
     let fixDelta = true;
 
@@ -562,7 +562,7 @@ export default class Controls {
 
   }
 
-  rotateCube( rotation, callback ) {
+  #rotateCube( rotation, callback ) {
 
     const config = this.flipConfig;
     const easing = [ Easing.Power.Out( 4 ), Easing.Sine.Out(), Easing.Back.Out( 2 ) ][ config ];
@@ -579,7 +579,7 @@ export default class Controls {
       },
       onComplete: () => {
 
-        this.edges.rotation.setFromVector3( this.snapRotation( this.edges.rotation.toVector3() ) );
+        this.edges.rotation.setFromVector3( this.#snapRotation( this.edges.rotation.toVector3() ) );
         this.game.cube.object.rotation.copy( this.edges.rotation );
         callback();
 
@@ -588,85 +588,45 @@ export default class Controls {
 
   }
 
-  selectLayer( layer ) {
-    this.resetPieces();
+  /**
+   * Select the layer to turn
+   *
+   * @param {Layer} layer 
+   */
+  #selectLayer( layer ) {
+    this.#resetPieces();
     this.group.rotation.set( 0, 0, 0 );
-    this.selectPiecesOnLayer(layer);
+
+    const axis = this.getMainAxis(layer.axis);
+    const pieces = this.game.cube.pieces.filter(piece => {
+      const piecePosition = piece.position.clone().multiplyScalar( this.scalar ).round();
+      return piecePosition[ axis ] == layer.index
+    });
+
+    this.group.updateMatrixWorld();
+    this.game.cube.object.updateMatrixWorld();
+
+    pieces.forEach( piece => {
+      this.#movePiece(piece, this.game.cube.object, this.group)
+    } );
+
     this.flipAxis = layer.axis;
   }
 
-  resetPieces() {
+  #resetPieces() {
     this.group.updateMatrixWorld();
     this.game.cube.object.updateMatrixWorld();
     while (this.group.children.length > 0) {
       const piece = this.group.children[0];
-      this.movePiece(piece, this.group, this.game.cube.object)
+      this.#movePiece(piece, this.group, this.game.cube.object)
     }
   }
-  selectPiecesOnLayer( layer ) {
-    const pieces = this.getPiecesFromLayer(layer)
-    this.group.updateMatrixWorld();
-    this.game.cube.object.updateMatrixWorld();
 
-
-    pieces.forEach( piece => {
-      this.movePiece(piece, this.game.cube.object, this.group)
-    } );
-  }
-
-  movePiece(piece, from, to) {
+  #movePiece(piece, from, to) {
     piece.applyMatrix( from.matrixWorld );
     from.remove( piece );
     piece.applyMatrix( new THREE.Matrix4().getInverse( to.matrixWorld ) );
     to.add( piece );
-  }
-
-  /**
-   * Get the pieces on the given layer
-   * 
-   * @param {Layer} layer  Layer to select from
-   * @returns
-   */
-  getPiecesFromLayer(layer) {
-    const axis = this.getMainAxis(layer.axis);
-    const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
-    const pieces = this.game.cube.pieces.filter(piece => {
-      const piecePosition = piece.position.clone().multiplyScalar( scalar ).round();
-      return piecePosition[ axis ] == layer.index
-    });
-    return pieces;
-  }
-
-  getLayer( position ) {
-    this.resetPieces();
-    const scalar = { 2: 6, 3: 3, 4: 4, 5: 3 }[ this.game.cube.size ];
-    const layer = [];
-
-    let axis;
-
-    if ( position === false ) {
-
-      const piece = this.dragIntersect.object.parent;
-
-      axis = this.getMainAxis( this.flipAxis );
-      position = piece.position.clone() .multiplyScalar( scalar ) .round();
-
-    } else {
-
-      axis = this.getMainAxis( position );
-
-    }
-
-    this.game.cube.pieces.forEach( piece => {
-
-      const piecePosition = piece.position.clone().multiplyScalar( scalar ).round();
-
-      if ( piecePosition[ axis ] == position[ axis ] ) layer.push( piece.name );
-
-    } );
-
-    return layer;
-
   }
 
   getIntersect( position, object, multiple ) {
@@ -692,7 +652,7 @@ export default class Controls {
 
   }
 
-  detach( child, parent ) {
+  #detach( child, parent ) {
 
     child.applyMatrix( parent.matrixWorld );
     parent.remove( child );
@@ -700,7 +660,7 @@ export default class Controls {
 
   }
 
-  attach( child, parent ) {
+  #attach( child, parent ) {
 
     child.applyMatrix( new THREE.Matrix4().getInverse( parent.matrixWorld ) );
     this.game.world.scene.remove( child );
@@ -708,7 +668,7 @@ export default class Controls {
 
   }
 
-  addMomentumPoint( delta ) {
+  #addMomentumPoint( delta ) {
 
     const time = Date.now();
 
@@ -718,12 +678,12 @@ export default class Controls {
 
   }
 
-  getMomentum() {
+  #getMomentum() {
 
     const points = this.momentum.length;
     const momentum = new THREE.Vector2();
 
-    this.addMomentumPoint( false );
+    this.#addMomentumPoint( false );
 
     this.momentum.forEach( ( point, index ) => {
 
@@ -735,19 +695,19 @@ export default class Controls {
 
   }
 
-  roundAngle( angle ) {
+  #roundAngle( angle ) {
 
     const round = Math.PI / 2;
     return Math.sign( angle ) * Math.round( Math.abs( angle) / round ) * round;
 
   }
 
-  snapRotation( angle ) {
+  #snapRotation( angle ) {
 
     return angle.set(
-      this.roundAngle( angle.x ),
-      this.roundAngle( angle.y ),
-      this.roundAngle( angle.z )
+      this.#roundAngle( angle.x ),
+      this.#roundAngle( angle.y ),
+      this.#roundAngle( angle.z )
     );
 
   }

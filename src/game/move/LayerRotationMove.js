@@ -19,6 +19,6 @@ export default class LayerRotationMove extends Move {
    * @returns Move
    */
   inverse() {
-    return new Move(this.layer, -this.angle);
+    return new LayerRotationMove(this.layer, -this.angle);
   }
 }

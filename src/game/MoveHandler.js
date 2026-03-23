@@ -13,9 +13,9 @@ export default class MoveHandler {
     this.possibleAngleMultipliers = [1, 2, -1];
 
     this.positionFromFace = {
-      D: THREE.Vector3(0, -1, 0), U: THREE.Vector3(0, 1, 0),
-      L: THREE.Vector3(-1, 0, 0), R: THREE.Vector3(1, 0, 0),
-      F: THREE.Vector3(0, 0, 1), B: THREE.Vector3(0, 0, -1)
+      D: new THREE.Vector3(0, -1, 0), U: new THREE.Vector3(0, 1, 0),
+      L: new THREE.Vector3(-1, 0, 0), R: new THREE.Vector3(1, 0, 0),
+      F: new THREE.Vector3(0, 0, 1), B: new THREE.Vector3(0, 0, -1)
     }
   }
 
@@ -66,6 +66,7 @@ export default class MoveHandler {
    * @returns {Move} The actual move
    */
   convertNotationToMove(notation, inverseQuaternion) {
+    console.log(notation);
     const face = notation.charAt( 0 );
     const modifier = notation.charAt( 1 );
     if (['x', 'y', 'z'].includes(face)) {
@@ -78,7 +79,7 @@ export default class MoveHandler {
 
     const coefficient = this.cubeSize > 3 && face !== face.toLowerCase() ? 2 : 1;
 
-    const absolutePosition = this.positionFromFace[face.toUpperCase()];
+    const absolutePosition = this.positionFromFace[face.toUpperCase()].clone();
 
     const relativePosition = absolutePosition.applyQuaternion(inverseQuaternion);
     const relativeMainAxis = Object.keys( relativePosition ).reduce(
